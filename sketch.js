@@ -1,6 +1,7 @@
 let capture;
 let faceMesh;
 let faces = [];
+let imgRing; // 耳環圖片變數
 
 // 模型設定
 let options = { 
@@ -9,17 +10,19 @@ let options = {
   flipHorizontal: false 
 };
 
-// 用於平滑座標，防止耳環抖動閃爍
+// 座標平滑處理
 let leftEarSmooth = { x: 0, y: 0 };
 let rightEarSmooth = { x: 0, y: 0 };
 let isFirstFrame = true;
 
 function preload() {
+  // 1. 載入 FaceMesh 模型
   faceMesh = ml5.faceMesh(options);
+  // 2. 載入指定的耳環圖片
+  imgRing = loadImage('pic/acc/acc1_ring.png');
 }
 
 function setup() {
-  // 建立全螢幕畫布
   createCanvas(windowWidth, windowHeight);
   
   capture = createCapture(VIDEO);
@@ -34,10 +37,10 @@ function gotFaces(results) {
 }
 
 function draw() {
-  // 【修正】背景改回寶寶藍
+  // 背景設為寶寶藍
   background('#E1F0FF');
 
-  // 1. 繪製文字資訊 (置中上方)
+  // 1. 繪製文字資訊 (不隨影像翻轉)
   fill(0);
   noStroke();
   textAlign(CENTER, CENTER);
@@ -46,63 +49,62 @@ function draw() {
   textSize(20);
   text("作品為影像辨識_耳環臉譜", width / 2, 75);
 
-  // 2. 計算影像顯示尺寸 (畫布 50%)
+  // 2. 計算影像顯示範圍 (50% 畫布大小)
   let imgW = width * 0.5;
   let imgH = height * 0.5;
   let xOffset = (width - imgW) / 2;
   let yOffset = (height - imgH) / 2;
 
+  // 3. 繪製影像 (鏡像處理)
   push();
-  // 3. 處理影像左右顛倒 (鏡像效果)
   translate(width, 0);
   scale(-1, 1);
   image(capture, xOffset, yOffset, imgW, imgH);
   pop();
 
-  // 4. 影像辨識：繪製耳環
+  // 4. 偵測與耳環顯示
   if (faces.length > 0) {
     let face = faces[0];
     let leftEarRaw = face.keypoints[177];
     let rightEarRaw = face.keypoints[401];
 
     if (leftEarRaw && rightEarRaw) {
-      // 座標平滑化 (防閃爍)
+      // 座標平滑濾波
       if (isFirstFrame) {
         leftEarSmooth = { x: leftEarRaw.x, y: leftEarRaw.y };
         rightEarSmooth = { x: rightEarRaw.x, y: rightEarRaw.y };
         isFirstFrame = false;
       } else {
-        let amt = 0.3; // 數值越小越平滑，跟隨感越重
+        let amt = 0.3; 
         leftEarSmooth.x = lerp(leftEarSmooth.x, leftEarRaw.x, amt);
         leftEarSmooth.y = lerp(leftEarSmooth.y, leftEarRaw.y, amt);
         rightEarSmooth.x = lerp(rightEarSmooth.x, rightEarRaw.x, amt);
         rightEarSmooth.y = lerp(rightEarSmooth.y, rightEarRaw.y, amt);
       }
 
-      // 繪製耳環：帶入平滑後的點位與顯示參數
-      drawEarring(leftEarSmooth, xOffset, yOffset, imgW, imgH);
-      drawEarring(rightEarSmooth, xOffset, yOffset, imgW, ih = imgH);
+      // 繪製耳環圖片
+      drawEarringImage(leftEarSmooth, xOffset, yOffset, imgW, imgH);
+      drawEarringImage(rightEarSmooth, xOffset, yOffset, imgW, imgH);
     }
   }
 }
 
-function drawEarring(pt, ox, oy, iw, ih) {
-  // 【核心校正】計算對齊鏡像影像的 X 座標
+function drawEarringImage(pt, ox, oy, iw, ih) {
+  // 鏡像座標校正
   let flippedX = 640 - pt.x; 
 
-  // 將偵測座標映射至畫布顯示區域
+  // 映射到畫布位置
   let mx = map(flippedX, 0, 640, ox, ox + iw);
   let my = map(pt.y, 0, 480, oy, oy + ih);
 
-  fill(255, 255, 0); // 黃色
-  noStroke();
+  // 設定耳環顯示大小 (根據影像寬度動態縮放)
+  let ringW = iw * 0.08; 
+  let ringH = (imgRing.height / imgRing.width) * ringW;
 
-  let circleSize = iw * 0.025; 
-  let spacing = circleSize * 1.3; 
-  
-  for (let i = 0; i < 3; i++) {
-    circle(mx, my + (i * spacing), circleSize);
-  }
+  // 繪製圖片，讓圖片頂部對準耳垂位置 (CENTER 模式方便對齊)
+  imageMode(CENTER);
+  image(imgRing, mx, my + (ringH/2), ringW, ringH);
+  imageMode(CORNER); // 畫完切換回預設模式
 }
 
 function windowResized() {
